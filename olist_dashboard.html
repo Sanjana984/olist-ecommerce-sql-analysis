@@ -1,0 +1,499 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Olist E-Commerce — SQL Forensic Analysis</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg: #0c0f0a;
+    --surface: #141810;
+    --surface2: #1c2218;
+    --border: rgba(255,255,255,0.07);
+    --text: #e8ede4;
+    --muted: #6b7a65;
+    --green: #7eca6a;
+    --green-dim: rgba(126,202,106,0.12);
+    --red: #e86060;
+    --red-dim: rgba(232,96,96,0.12);
+    --amber: #e8b860;
+    --amber-dim: rgba(232,184,96,0.12);
+    --blue: #60a8e8;
+    --blue-dim: rgba(96,168,232,0.12);
+    --accent: #7eca6a;
+  }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'DM Sans', sans-serif;
+    font-size: 14px;
+    line-height: 1.5;
+    min-height: 100vh;
+    padding: 48px 32px;
+  }
+
+  .page { max-width: 960px; margin: 0 auto; }
+
+  /* Header */
+  .header { margin-bottom: 48px; }
+  .header-eyebrow {
+    font-family: 'DM Mono', monospace;
+    font-size: 11px;
+    letter-spacing: 0.12em;
+    color: var(--accent);
+    text-transform: uppercase;
+    margin-bottom: 12px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  .header-eyebrow::after {
+    content: '';
+    flex: 1;
+    height: 1px;
+    background: var(--border);
+    max-width: 200px;
+  }
+  .header h1 {
+    font-size: 36px;
+    font-weight: 300;
+    color: var(--text);
+    letter-spacing: -0.02em;
+    margin-bottom: 8px;
+  }
+  .header h1 span { color: var(--accent); font-weight: 500; }
+  .header-meta {
+    font-family: 'DM Mono', monospace;
+    font-size: 12px;
+    color: var(--muted);
+    display: flex;
+    gap: 24px;
+    flex-wrap: wrap;
+  }
+  .header-meta span::before { content: '— '; }
+
+  /* Section */
+  .section { margin-bottom: 40px; }
+  .section-header {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 14px;
+  }
+  .section-tag {
+    font-family: 'DM Mono', monospace;
+    font-size: 10px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    padding: 3px 10px;
+    border-radius: 3px;
+    font-weight: 500;
+  }
+  .tag-revenue { background: var(--green-dim); color: var(--green); }
+  .tag-delivery { background: var(--blue-dim); color: var(--blue); }
+  .tag-customers { background: var(--amber-dim); color: var(--amber); }
+  .tag-sellers { background: var(--red-dim); color: var(--red); }
+  .tag-payments { background: rgba(180,130,255,0.12); color: #c4a0ff; }
+
+  .section-line {
+    flex: 1;
+    height: 1px;
+    background: var(--border);
+  }
+
+  /* Cards grid */
+  .cards {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+    gap: 10px;
+  }
+
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 16px;
+    position: relative;
+    overflow: hidden;
+    transition: border-color 0.2s;
+  }
+  .card:hover { border-color: rgba(255,255,255,0.15); }
+
+  .card::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 2px;
+    border-radius: 8px 8px 0 0;
+  }
+  .card.positive::before { background: var(--green); }
+  .card.negative::before { background: var(--red); }
+  .card.warning::before { background: var(--amber); }
+  .card.info::before { background: var(--blue); }
+  .card.neutral::before { background: var(--muted); }
+
+  .card-label {
+    font-size: 11px;
+    color: var(--muted);
+    margin-bottom: 8px;
+    font-weight: 400;
+    line-height: 1.3;
+  }
+  .card-value {
+    font-family: 'DM Mono', monospace;
+    font-size: 22px;
+    font-weight: 500;
+    line-height: 1;
+  }
+  .card-value.positive { color: var(--green); }
+  .card-value.negative { color: var(--red); }
+  .card-value.warning { color: var(--amber); }
+  .card-value.info { color: var(--blue); }
+  .card-value.neutral { color: var(--text); }
+  .card-value.purple { color: #c4a0ff; }
+
+  .card-note {
+    font-size: 10px;
+    color: var(--muted);
+    margin-top: 6px;
+    font-family: 'DM Mono', monospace;
+  }
+
+  /* Findings section */
+  .findings { margin-top: 48px; }
+  .findings-title {
+    font-family: 'DM Mono', monospace;
+    font-size: 10px;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin-bottom: 16px;
+  }
+  .finding-list { display: flex; flex-direction: column; gap: 8px; }
+  .finding {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 14px 18px;
+    display: grid;
+    grid-template-columns: 28px 140px 1fr auto;
+    align-items: center;
+    gap: 16px;
+  }
+  .finding-num {
+    font-family: 'DM Mono', monospace;
+    font-size: 11px;
+    color: var(--muted);
+  }
+  .finding-area {
+    font-family: 'DM Mono', monospace;
+    font-size: 11px;
+    color: var(--accent);
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+  }
+  .finding-action {
+    font-size: 13px;
+    color: var(--text);
+  }
+  .finding-impact {
+    font-family: 'DM Mono', monospace;
+    font-size: 12px;
+    color: var(--amber);
+    white-space: nowrap;
+    text-align: right;
+  }
+
+  /* Footer */
+  .footer {
+    margin-top: 48px;
+    padding-top: 24px;
+    border-top: 1px solid var(--border);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: gap;
+  }
+  .footer-left {
+    font-family: 'DM Mono', monospace;
+    font-size: 11px;
+    color: var(--muted);
+  }
+  .footer-skills {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+  .skill-pill {
+    font-family: 'DM Mono', monospace;
+    font-size: 10px;
+    padding: 3px 8px;
+    border: 1px solid var(--border);
+    border-radius: 3px;
+    color: var(--muted);
+    letter-spacing: 0.05em;
+  }
+
+  @media (max-width: 600px) {
+    body { padding: 24px 16px; }
+    .header h1 { font-size: 24px; }
+    .cards { grid-template-columns: repeat(2, 1fr); }
+    .finding { grid-template-columns: 28px 1fr; grid-template-rows: auto auto; }
+    .finding-impact { grid-column: 2; }
+  }
+</style>
+</head>
+<body>
+<div class="page">
+
+  <!-- Header -->
+  <div class="header">
+    <div class="header-eyebrow">SQL Portfolio Project</div>
+    <h1>Olist <span>Forensic Analysis</span></h1>
+    <div class="header-meta">
+      <span>100,000+ orders analysed</span>
+      <span>8 tables · 1.6M rows</span>
+      <span>17 SQL queries</span>
+      <span>MySQL</span>
+    </div>
+  </div>
+
+  <!-- Revenue -->
+  <div class="section">
+    <div class="section-header">
+      <span class="section-tag tag-revenue">Revenue</span>
+      <div class="section-line"></div>
+    </div>
+    <div class="cards">
+      <div class="card neutral">
+        <div class="card-label">Gross revenue</div>
+        <div class="card-value neutral">$13.59M</div>
+      </div>
+      <div class="card neutral">
+        <div class="card-label">Avg order value</div>
+        <div class="card-value neutral">$120.65</div>
+      </div>
+      <div class="card negative">
+        <div class="card-label">Lost to cancellations</div>
+        <div class="card-value negative">$95,235</div>
+        <div class="card-note">461 cancelled orders</div>
+      </div>
+      <div class="card negative">
+        <div class="card-label">Stuck in pipeline</div>
+        <div class="card-value negative">$121,965</div>
+        <div class="card-note">613 paid, unshipped</div>
+      </div>
+      <div class="card negative">
+        <div class="card-label">Freight margin losses</div>
+        <div class="card-value negative">$13,221</div>
+        <div class="card-note">Top 5 categories</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Delivery -->
+  <div class="section">
+    <div class="section-header">
+      <span class="section-tag tag-delivery">Delivery</span>
+      <div class="section-line"></div>
+    </div>
+    <div class="cards">
+      <div class="card neutral">
+        <div class="card-label">Total orders</div>
+        <div class="card-value neutral">98,666</div>
+      </div>
+      <div class="card positive">
+        <div class="card-label">On time delivery rate</div>
+        <div class="card-value positive">91.89%</div>
+      </div>
+      <div class="card negative">
+        <div class="card-label">Worst single delay</div>
+        <div class="card-value negative">188 days</div>
+        <div class="card-note">2017 logistics failure</div>
+      </div>
+      <div class="card positive">
+        <div class="card-label">On time review score</div>
+        <div class="card-value positive">4.29/5</div>
+      </div>
+      <div class="card negative">
+        <div class="card-label">Late delivery score</div>
+        <div class="card-value negative">2.05/5</div>
+        <div class="card-note">52% satisfaction drop</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Customers -->
+  <div class="section">
+    <div class="section-header">
+      <span class="section-tag tag-customers">Customer LTV</span>
+      <div class="section-line"></div>
+    </div>
+    <div class="cards">
+      <div class="card neutral">
+        <div class="card-label">Unique customers</div>
+        <div class="card-value neutral">94,990</div>
+      </div>
+      <div class="card negative">
+        <div class="card-label">Retention rate</div>
+        <div class="card-value negative">6.44%</div>
+        <div class="card-note">Industry avg 20–30%</div>
+      </div>
+      <div class="card positive">
+        <div class="card-label">Champion customers</div>
+        <div class="card-value positive">760</div>
+        <div class="card-note">Avg spend $775</div>
+      </div>
+      <div class="card warning">
+        <div class="card-label">High value gone cold</div>
+        <div class="card-value warning">1,572</div>
+        <div class="card-note">Avg spend $943</div>
+      </div>
+      <div class="card info">
+        <div class="card-label">Dormant opportunity</div>
+        <div class="card-value info">$1.48M</div>
+        <div class="card-note">Win-back potential</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Sellers -->
+  <div class="section">
+    <div class="section-header">
+      <span class="section-tag tag-sellers">Sellers</span>
+      <div class="section-line"></div>
+    </div>
+    <div class="cards">
+      <div class="card neutral">
+        <div class="card-label">Active sellers</div>
+        <div class="card-value neutral">3,095</div>
+      </div>
+      <div class="card neutral">
+        <div class="card-label">Platform avg review</div>
+        <div class="card-value neutral">4.03/5</div>
+      </div>
+      <div class="card positive">
+        <div class="card-label">Elite top performers</div>
+        <div class="card-value positive">12</div>
+        <div class="card-note">Avg $152,374 revenue</div>
+      </div>
+      <div class="card negative">
+        <div class="card-label">High cancellation</div>
+        <div class="card-value negative">49</div>
+        <div class="card-note">11.52% cancel rate</div>
+      </div>
+      <div class="card warning">
+        <div class="card-label">Undermonetised quality</div>
+        <div class="card-value warning">89</div>
+        <div class="card-note">4.37 avg review</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Payments -->
+  <div class="section">
+    <div class="section-header">
+      <span class="section-tag tag-payments">Payment & Credit Risk</span>
+      <div class="section-line"></div>
+    </div>
+    <div class="cards">
+      <div class="card neutral">
+        <div class="card-label">Credit card share</div>
+        <div class="card-value neutral">76.94%</div>
+      </div>
+      <div class="card neutral">
+        <div class="card-label">Avg instalments</div>
+        <div class="card-value neutral">3.51</div>
+        <div class="card-note">Credit card orders</div>
+      </div>
+      <div class="card negative">
+        <div class="card-label">High risk exposure</div>
+        <div class="card-value negative">$2.33M</div>
+        <div class="card-note">10+ instalment orders</div>
+      </div>
+      <div class="card positive">
+        <div class="card-label">Paid in full orders</div>
+        <div class="card-value positive">25,549</div>
+        <div class="card-note">Score 4.15/5</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Business Recommendations -->
+  <div class="findings">
+    <div class="findings-title">Business recommendations</div>
+    <div class="finding-list">
+      <div class="finding">
+        <span class="finding-num">01</span>
+        <span class="finding-area">Revenue</span>
+        <span class="finding-action">Cancel high-freight low-value listings in electronics and construction tools</span>
+        <span class="finding-impact">$13,221 recoverable</span>
+      </div>
+      <div class="finding">
+        <span class="finding-num">02</span>
+        <span class="finding-area">Pipeline</span>
+        <span class="finding-action">Investigate 613 paid but unshipped orders immediately</span>
+        <span class="finding-impact">$121,965 at risk</span>
+      </div>
+      <div class="finding">
+        <span class="finding-num">03</span>
+        <span class="finding-area">Sellers</span>
+        <span class="finding-action">Place 49 high-cancellation sellers on performance review</span>
+        <span class="finding-impact">$95,235 losses</span>
+      </div>
+      <div class="finding">
+        <span class="finding-num">04</span>
+        <span class="finding-area">Retention</span>
+        <span class="finding-action">Launch win-back campaign for 1,572 high-value cold customers</span>
+        <span class="finding-impact">$1.48M potential</span>
+      </div>
+      <div class="finding">
+        <span class="finding-num">05</span>
+        <span class="finding-area">Delivery</span>
+        <span class="finding-action">Investigate 2017 logistics failure — multiple orders 150–188 days late</span>
+        <span class="finding-impact">Score 4.29 → 2.05</span>
+      </div>
+      <div class="finding">
+        <span class="finding-num">06</span>
+        <span class="finding-area">Credit Risk</span>
+        <span class="finding-action">Set maximum instalment limits per product category</span>
+        <span class="finding-impact">$2.33M exposure</span>
+      </div>
+      <div class="finding">
+        <span class="finding-num">07</span>
+        <span class="finding-area">Growth</span>
+        <span class="finding-action">Create growth programme for 89 undermonetised quality sellers</span>
+        <span class="finding-impact">3x revenue potential</span>
+      </div>
+      <div class="finding">
+        <span class="finding-num">08</span>
+        <span class="finding-area">Platform</span>
+        <span class="finding-action">Protect top 12 elite sellers with dedicated account management</span>
+        <span class="finding-impact">$457,000 risk</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Footer -->
+  <div class="footer">
+    <div class="footer-left">Built with MySQL · Olist Brazilian E-Commerce Dataset</div>
+    <div class="footer-skills">
+      <span class="skill-pill">CTEs</span>
+      <span class="skill-pill">JOINs</span>
+      <span class="skill-pill">CASE WHEN</span>
+      <span class="skill-pill">Subqueries</span>
+      <span class="skill-pill">GROUP BY</span>
+      <span class="skill-pill">HAVING</span>
+      <span class="skill-pill">DATEDIFF</span>
+      <span class="skill-pill">RFM</span>
+      <span class="skill-pill">UNION ALL</span>
+    </div>
+  </div>
+
+</div>
+</body>
+</html>
